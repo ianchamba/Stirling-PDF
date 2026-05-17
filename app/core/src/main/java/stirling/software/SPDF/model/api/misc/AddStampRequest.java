@@ -84,4 +84,12 @@ public class AddStampRequest extends PDFWithPageNums {
 
     @Schema(description = "The color of the stamp text", defaultValue = "#d3d3d3")
     private String customColor;
+
+    @Schema(
+            description =
+                    "When true, the stamp is added as a PDF annotation with the Print flag"
+                            + " disabled, so it is visible on screen but is not rendered when the"
+                            + " document is printed by compliant viewers.",
+            defaultValue = "false")
+    private Boolean hideOnPrint;
 }

@@ -21,6 +21,7 @@ import org.apache.commons.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
@@ -29,6 +30,9 @@ import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationRubberStamp;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.apache.pdfbox.util.Matrix;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -131,6 +135,7 @@ public class StampController {
         float overrideY = request.getOverrideY(); // New field for Y override
 
         String customColor = request.getCustomColor();
+        boolean hideOnPrint = Boolean.TRUE.equals(request.getHideOnPrint());
         float marginFactor =
                 switch (request.getCustomMargin().toLowerCase(Locale.ROOT)) {
                     case "small" -> 0.02f;
@@ -151,6 +156,28 @@ public class StampController {
                     PDPage page = document.getPage(zeroBasedIndex);
                     PDRectangle pageSize = page.getMediaBox();
                     float margin = marginFactor * (pageSize.getWidth() + pageSize.getHeight()) / 2;
+
+                    if (hideOnPrint) {
+                        addStampAsAnnotation(
+                                document,
+                                page,
+                                pageSize,
+                                stampType,
+                                stampText,
+                                stampImage,
+                                rotation,
+                                opacity,
+                                position,
+                                fontSize,
+                                alphabet,
+                                overrideX,
+                                overrideY,
+                                margin,
+                                customColor,
+                                pageIndex,
+                                pdfFileName);
+                        continue;
+                    }
 
                     PDPageContentStream contentStream =
                             new PDPageContentStream(
@@ -203,6 +230,82 @@ public class StampController {
                     GeneralUtils.generateFilename(pdfFile.getOriginalFilename(), "_stamped.pdf"),
                     tempFileManager);
         }
+    }
+
+    private void addStampAsAnnotation(
+            PDDocument document,
+            PDPage page,
+            PDRectangle pageSize,
+            String stampType,
+            String stampText,
+            MultipartFile stampImage,
+            float rotation,
+            float opacity,
+            int position,
+            float fontSize,
+            String alphabet,
+            float overrideX,
+            float overrideY,
+            float margin,
+            String customColor,
+            int pageIndex,
+            String pdfFileName)
+            throws IOException {
+
+        PDAppearanceStream appearance = new PDAppearanceStream(document);
+        appearance.setResources(new PDResources());
+        appearance.setBBox(new PDRectangle(pageSize.getWidth(), pageSize.getHeight()));
+
+        try (PDPageContentStream appearanceStream =
+                new PDPageContentStream(document, appearance)) {
+            PDExtendedGraphicsState graphicsState = new PDExtendedGraphicsState();
+            graphicsState.setNonStrokingAlphaConstant(opacity);
+            appearanceStream.setGraphicsStateParameters(graphicsState);
+
+            if ("text".equalsIgnoreCase(stampType)) {
+                addTextStamp(
+                        appearanceStream,
+                        stampText,
+                        document,
+                        page,
+                        rotation,
+                        position,
+                        fontSize,
+                        alphabet,
+                        overrideX,
+                        overrideY,
+                        margin,
+                        customColor,
+                        pageIndex,
+                        pdfFileName);
+            } else if ("image".equalsIgnoreCase(stampType)) {
+                addImageStamp(
+                        appearanceStream,
+                        stampImage,
+                        document,
+                        page,
+                        rotation,
+                        position,
+                        fontSize,
+                        overrideX,
+                        overrideY,
+                        margin);
+            }
+        }
+
+        PDAppearanceDictionary appearanceDictionary = new PDAppearanceDictionary();
+        appearanceDictionary.setNormalAppearance(appearance);
+
+        PDAnnotationRubberStamp stamp = new PDAnnotationRubberStamp();
+        stamp.setRectangle(new PDRectangle(0, 0, pageSize.getWidth(), pageSize.getHeight()));
+        stamp.setAppearance(appearanceDictionary);
+        // Print flag off -> visible on screen, suppressed when printing in compliant viewers.
+        stamp.setPrinted(false);
+        stamp.setReadOnly(true);
+        stamp.setLocked(true);
+        stamp.setLockedContents(true);
+
+        page.getAnnotations().add(stamp);
     }
 
     private void addTextStamp(
