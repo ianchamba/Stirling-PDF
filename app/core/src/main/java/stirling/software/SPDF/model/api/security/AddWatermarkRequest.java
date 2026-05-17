@@ -60,4 +60,12 @@ public class AddWatermarkRequest extends PDFFile {
             defaultValue = "false",
             requiredMode = Schema.RequiredMode.REQUIRED)
     private Boolean convertPDFToImage;
+
+    @Schema(
+            description =
+                    "When true, the watermark is added as a PDF annotation with the Print flag"
+                            + " disabled, so it is visible on screen but is not rendered when the"
+                            + " document is printed by compliant viewers.",
+            defaultValue = "false")
+    private Boolean hideOnPrint;
 }

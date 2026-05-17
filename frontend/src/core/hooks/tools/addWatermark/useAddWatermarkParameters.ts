@@ -16,6 +16,7 @@ export interface AddWatermarkParameters extends BaseParameters {
   alphabet: string;
   customColor: string;
   convertPDFToImage: boolean;
+  hideOnPrint: boolean;
 }
 
 export const defaultParameters: AddWatermarkParameters = {
@@ -29,6 +30,7 @@ export const defaultParameters: AddWatermarkParameters = {
   alphabet: "roman",
   customColor: "#d3d3d3",
   convertPDFToImage: false,
+  hideOnPrint: false,
 };
 
 export type AddWatermarkParametersHook =

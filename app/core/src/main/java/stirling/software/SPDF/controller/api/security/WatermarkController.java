@@ -15,6 +15,8 @@ import org.apache.commons.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
@@ -22,6 +24,9 @@ import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationRubberStamp;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.apache.pdfbox.util.Matrix;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -102,12 +107,35 @@ public class WatermarkController {
         int heightSpacer = request.getHeightSpacer();
         String customColor = request.getCustomColor();
         boolean convertPdfToImage = Boolean.TRUE.equals(request.getConvertPDFToImage());
+        boolean hideOnPrint = Boolean.TRUE.equals(request.getHideOnPrint());
+
+        // hideOnPrint relies on a PDF annotation flag; flattening the document to images
+        // would bake the annotation into the raster and re-enable printing, so we skip it.
+        if (hideOnPrint) {
+            convertPdfToImage = false;
+        }
 
         // Load the input PDF with proper resource management
         try (PDDocument document = pdfDocumentFactory.load(pdfFile)) {
 
             // Create a page in the document
             for (PDPage page : document.getPages()) {
+                if (hideOnPrint) {
+                    addWatermarkAsAnnotation(
+                            document,
+                            page,
+                            watermarkType,
+                            watermarkText,
+                            watermarkImage,
+                            rotation,
+                            opacity,
+                            widthSpacer,
+                            heightSpacer,
+                            fontSize,
+                            alphabet,
+                            customColor);
+                    continue;
+                }
                 // Get the page's content stream
                 try (PDPageContentStream contentStream =
                         new PDPageContentStream(
@@ -166,6 +194,72 @@ public class WatermarkController {
                         tempFileManager);
             }
         }
+    }
+
+    private void addWatermarkAsAnnotation(
+            PDDocument document,
+            PDPage page,
+            String watermarkType,
+            String watermarkText,
+            MultipartFile watermarkImage,
+            float rotation,
+            float opacity,
+            int widthSpacer,
+            int heightSpacer,
+            float fontSize,
+            String alphabet,
+            String customColor)
+            throws IOException {
+        PDRectangle mediaBox = page.getMediaBox();
+
+        PDAppearanceStream appearance = new PDAppearanceStream(document);
+        appearance.setResources(new PDResources());
+        appearance.setBBox(new PDRectangle(mediaBox.getWidth(), mediaBox.getHeight()));
+
+        try (PDPageContentStream appearanceStream =
+                new PDPageContentStream(document, appearance)) {
+            PDExtendedGraphicsState graphicsState = new PDExtendedGraphicsState();
+            graphicsState.setNonStrokingAlphaConstant(opacity);
+            appearanceStream.setGraphicsStateParameters(graphicsState);
+
+            if ("text".equalsIgnoreCase(watermarkType)) {
+                addTextWatermark(
+                        appearanceStream,
+                        watermarkText,
+                        document,
+                        page,
+                        rotation,
+                        widthSpacer,
+                        heightSpacer,
+                        fontSize,
+                        alphabet,
+                        customColor);
+            } else if ("image".equalsIgnoreCase(watermarkType)) {
+                addImageWatermark(
+                        appearanceStream,
+                        watermarkImage,
+                        document,
+                        page,
+                        rotation,
+                        widthSpacer,
+                        heightSpacer,
+                        fontSize);
+            }
+        }
+
+        PDAppearanceDictionary appearanceDictionary = new PDAppearanceDictionary();
+        appearanceDictionary.setNormalAppearance(appearance);
+
+        PDAnnotationRubberStamp stamp = new PDAnnotationRubberStamp();
+        stamp.setRectangle(new PDRectangle(0, 0, mediaBox.getWidth(), mediaBox.getHeight()));
+        stamp.setAppearance(appearanceDictionary);
+        // Print flag off -> visible on screen, suppressed when printing in compliant viewers.
+        stamp.setPrinted(false);
+        stamp.setReadOnly(true);
+        stamp.setLocked(true);
+        stamp.setLockedContents(true);
+
+        page.getAnnotations().add(stamp);
     }
 
     private void addTextWatermark(

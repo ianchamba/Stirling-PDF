@@ -104,7 +104,22 @@ const WatermarkFormatting = ({
         onChange={(event) =>
           onParameterChange("convertPDFToImage", event.currentTarget.checked)
         }
-        disabled={disabled}
+        disabled={disabled || parameters.hideOnPrint}
+      />
+      <Checkbox
+        label={t(
+          "watermark.settings.hideOnPrint",
+          "Hide watermark when printing (visible on screen only)",
+        )}
+        description={t(
+          "watermark.settings.hideOnPrint.description",
+          "Adds the watermark as a PDF annotation with the Print flag disabled. Supported by most viewers (Adobe Reader, Firefox, Chrome, evince, Okular). Note: this is a visual deterrent, not cryptographic protection.",
+        )}
+        checked={parameters.hideOnPrint}
+        onChange={(event) =>
+          onParameterChange("hideOnPrint", event.currentTarget.checked)
+        }
+        disabled={disabled || parameters.convertPDFToImage}
       />
     </Stack>
   );

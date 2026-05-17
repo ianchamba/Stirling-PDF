@@ -44,6 +44,10 @@ export const buildAddWatermarkFormData = (
     "convertPDFToImage",
     (parameters.convertPDFToImage ?? false).toString(),
   );
+  formData.append(
+    "hideOnPrint",
+    (parameters.hideOnPrint ?? false).toString(),
+  );
 
   return formData;
 };
