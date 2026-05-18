@@ -12,10 +12,10 @@ import java.nio.file.Files;
 import javax.imageio.ImageIO;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
-import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
@@ -23,10 +23,8 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.pdmodel.graphics.optionalcontent.PDOptionalContentGroup;
 import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationRubberStamp;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.apache.pdfbox.util.Matrix;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -49,6 +47,7 @@ import stirling.software.common.annotations.AutoJobPostMapping;
 import stirling.software.common.annotations.api.SecurityApi;
 import stirling.software.common.service.CustomPDFDocumentFactory;
 import stirling.software.common.util.GeneralUtils;
+import stirling.software.common.util.OcgUtils;
 import stirling.software.common.util.PdfUtils;
 import stirling.software.common.util.RegexPatternUtils;
 import stirling.software.common.util.TempFileManager;
@@ -109,8 +108,8 @@ public class WatermarkController {
         boolean convertPdfToImage = Boolean.TRUE.equals(request.getConvertPDFToImage());
         boolean hideOnPrint = Boolean.TRUE.equals(request.getHideOnPrint());
 
-        // hideOnPrint relies on a PDF annotation flag; flattening the document to images
-        // would bake the annotation into the raster and re-enable printing, so we skip it.
+        // Rasterising the page would bake the watermark into the image and defeat the
+        // print suppression — keep these two options mutually exclusive.
         if (hideOnPrint) {
             convertPdfToImage = false;
         }
@@ -118,24 +117,15 @@ public class WatermarkController {
         // Load the input PDF with proper resource management
         try (PDDocument document = pdfDocumentFactory.load(pdfFile)) {
 
+            // One OCG for the whole document keeps the layers panel tidy and lets the
+            // watermark stay in the page content stream — URL auto-detection, text
+            // selection and search keep working, and pre-existing link annotations are
+            // not blocked (unlike a full-page rubber-stamp annotation overlay).
+            PDOptionalContentGroup hideOnPrintOcg =
+                    hideOnPrint ? OcgUtils.createHideOnPrintOcg(document, "Watermark") : null;
+
             // Create a page in the document
             for (PDPage page : document.getPages()) {
-                if (hideOnPrint) {
-                    addWatermarkAsAnnotation(
-                            document,
-                            page,
-                            watermarkType,
-                            watermarkText,
-                            watermarkImage,
-                            rotation,
-                            opacity,
-                            widthSpacer,
-                            heightSpacer,
-                            fontSize,
-                            alphabet,
-                            customColor);
-                    continue;
-                }
                 // Get the page's content stream
                 try (PDPageContentStream contentStream =
                         new PDPageContentStream(
@@ -144,6 +134,10 @@ public class WatermarkController {
                                 PDPageContentStream.AppendMode.APPEND,
                                 true,
                                 true)) {
+
+                    if (hideOnPrintOcg != null) {
+                        contentStream.beginMarkedContent(COSName.OC, hideOnPrintOcg);
+                    }
 
                     // Set transparency
                     PDExtendedGraphicsState graphicsState = new PDExtendedGraphicsState();
@@ -173,6 +167,10 @@ public class WatermarkController {
                                 heightSpacer,
                                 fontSize);
                     }
+
+                    if (hideOnPrintOcg != null) {
+                        contentStream.endMarkedContent();
+                    }
                 }
             }
 
@@ -194,77 +192,6 @@ public class WatermarkController {
                         tempFileManager);
             }
         }
-    }
-
-    private void addWatermarkAsAnnotation(
-            PDDocument document,
-            PDPage page,
-            String watermarkType,
-            String watermarkText,
-            MultipartFile watermarkImage,
-            float rotation,
-            float opacity,
-            int widthSpacer,
-            int heightSpacer,
-            float fontSize,
-            String alphabet,
-            String customColor)
-            throws IOException {
-        PDRectangle mediaBox = page.getMediaBox();
-
-        PDAppearanceStream appearance = new PDAppearanceStream(document);
-        appearance.setResources(new PDResources());
-        appearance.setBBox(new PDRectangle(mediaBox.getWidth(), mediaBox.getHeight()));
-
-        try (PDPageContentStream appearanceStream =
-                new PDPageContentStream(document, appearance)) {
-            PDExtendedGraphicsState graphicsState = new PDExtendedGraphicsState();
-            graphicsState.setNonStrokingAlphaConstant(opacity);
-            appearanceStream.setGraphicsStateParameters(graphicsState);
-
-            if ("text".equalsIgnoreCase(watermarkType)) {
-                addTextWatermark(
-                        appearanceStream,
-                        watermarkText,
-                        document,
-                        page,
-                        rotation,
-                        widthSpacer,
-                        heightSpacer,
-                        fontSize,
-                        alphabet,
-                        customColor);
-            } else if ("image".equalsIgnoreCase(watermarkType)) {
-                addImageWatermark(
-                        appearanceStream,
-                        watermarkImage,
-                        document,
-                        page,
-                        rotation,
-                        widthSpacer,
-                        heightSpacer,
-                        fontSize);
-            }
-        }
-
-        PDAppearanceDictionary appearanceDictionary = new PDAppearanceDictionary();
-        appearanceDictionary.setNormalAppearance(appearance);
-
-        PDAnnotationRubberStamp stamp = new PDAnnotationRubberStamp();
-        stamp.setRectangle(new PDRectangle(0, 0, mediaBox.getWidth(), mediaBox.getHeight()));
-        stamp.setAppearance(appearanceDictionary);
-        // Print flag off -> visible on screen, suppressed when printing in compliant viewers.
-        stamp.setPrinted(false);
-        stamp.setReadOnly(true);
-        stamp.setLocked(true);
-        stamp.setLockedContents(true);
-
-        // Insert at index 0 so the watermark sits BELOW pre-existing annotations
-        // (notably link annotations). If it were appended at the end of the array
-        // it would be on top of the z-order and, since its rect covers the whole
-        // page, it would intercept every click and break PDF links — ReadOnly does
-        // not make annotations transparent to mouse events.
-        page.getAnnotations().add(0, stamp);
     }
 
     private void addTextWatermark(

@@ -18,10 +18,10 @@ import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
-import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
@@ -29,10 +29,8 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.pdmodel.graphics.optionalcontent.PDOptionalContentGroup;
 import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationRubberStamp;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.apache.pdfbox.util.Matrix;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -53,6 +51,7 @@ import stirling.software.common.annotations.api.MiscApi;
 import stirling.software.common.service.CustomPDFDocumentFactory;
 import stirling.software.common.util.ExceptionUtils;
 import stirling.software.common.util.GeneralUtils;
+import stirling.software.common.util.OcgUtils;
 import stirling.software.common.util.RegexPatternUtils;
 import stirling.software.common.util.TempFile;
 import stirling.software.common.util.TempFileManager;
@@ -150,34 +149,18 @@ public class StampController {
 
             List<Integer> pageNumbers = request.getPageNumbersList(document, true);
 
+            // One OCG for the whole document keeps the layers panel tidy and lets the
+            // stamp stay in the page content stream — URL auto-detection, text selection
+            // and search keep working, and pre-existing link annotations are not blocked.
+            PDOptionalContentGroup hideOnPrintOcg =
+                    hideOnPrint ? OcgUtils.createHideOnPrintOcg(document, "Stamp") : null;
+
             for (int pageIndex : pageNumbers) {
                 int zeroBasedIndex = pageIndex - 1;
                 if (zeroBasedIndex >= 0 && zeroBasedIndex < document.getNumberOfPages()) {
                     PDPage page = document.getPage(zeroBasedIndex);
                     PDRectangle pageSize = page.getMediaBox();
                     float margin = marginFactor * (pageSize.getWidth() + pageSize.getHeight()) / 2;
-
-                    if (hideOnPrint) {
-                        addStampAsAnnotation(
-                                document,
-                                page,
-                                pageSize,
-                                stampType,
-                                stampText,
-                                stampImage,
-                                rotation,
-                                opacity,
-                                position,
-                                fontSize,
-                                alphabet,
-                                overrideX,
-                                overrideY,
-                                margin,
-                                customColor,
-                                pageIndex,
-                                pdfFileName);
-                        continue;
-                    }
 
                     PDPageContentStream contentStream =
                             new PDPageContentStream(
@@ -186,6 +169,10 @@ public class StampController {
                                     PDPageContentStream.AppendMode.APPEND,
                                     true,
                                     true);
+
+                    if (hideOnPrintOcg != null) {
+                        contentStream.beginMarkedContent(COSName.OC, hideOnPrintOcg);
+                    }
 
                     PDExtendedGraphicsState graphicsState = new PDExtendedGraphicsState();
                     graphicsState.setNonStrokingAlphaConstant(opacity);
@@ -221,6 +208,10 @@ public class StampController {
                                 margin);
                     }
 
+                    if (hideOnPrintOcg != null) {
+                        contentStream.endMarkedContent();
+                    }
+
                     contentStream.close();
                 }
             }
@@ -230,87 +221,6 @@ public class StampController {
                     GeneralUtils.generateFilename(pdfFile.getOriginalFilename(), "_stamped.pdf"),
                     tempFileManager);
         }
-    }
-
-    private void addStampAsAnnotation(
-            PDDocument document,
-            PDPage page,
-            PDRectangle pageSize,
-            String stampType,
-            String stampText,
-            MultipartFile stampImage,
-            float rotation,
-            float opacity,
-            int position,
-            float fontSize,
-            String alphabet,
-            float overrideX,
-            float overrideY,
-            float margin,
-            String customColor,
-            int pageIndex,
-            String pdfFileName)
-            throws IOException {
-
-        PDAppearanceStream appearance = new PDAppearanceStream(document);
-        appearance.setResources(new PDResources());
-        appearance.setBBox(new PDRectangle(pageSize.getWidth(), pageSize.getHeight()));
-
-        try (PDPageContentStream appearanceStream =
-                new PDPageContentStream(document, appearance)) {
-            PDExtendedGraphicsState graphicsState = new PDExtendedGraphicsState();
-            graphicsState.setNonStrokingAlphaConstant(opacity);
-            appearanceStream.setGraphicsStateParameters(graphicsState);
-
-            if ("text".equalsIgnoreCase(stampType)) {
-                addTextStamp(
-                        appearanceStream,
-                        stampText,
-                        document,
-                        page,
-                        rotation,
-                        position,
-                        fontSize,
-                        alphabet,
-                        overrideX,
-                        overrideY,
-                        margin,
-                        customColor,
-                        pageIndex,
-                        pdfFileName);
-            } else if ("image".equalsIgnoreCase(stampType)) {
-                addImageStamp(
-                        appearanceStream,
-                        stampImage,
-                        document,
-                        page,
-                        rotation,
-                        position,
-                        fontSize,
-                        overrideX,
-                        overrideY,
-                        margin);
-            }
-        }
-
-        PDAppearanceDictionary appearanceDictionary = new PDAppearanceDictionary();
-        appearanceDictionary.setNormalAppearance(appearance);
-
-        PDAnnotationRubberStamp stamp = new PDAnnotationRubberStamp();
-        stamp.setRectangle(new PDRectangle(0, 0, pageSize.getWidth(), pageSize.getHeight()));
-        stamp.setAppearance(appearanceDictionary);
-        // Print flag off -> visible on screen, suppressed when printing in compliant viewers.
-        stamp.setPrinted(false);
-        stamp.setReadOnly(true);
-        stamp.setLocked(true);
-        stamp.setLockedContents(true);
-
-        // Insert at index 0 so the stamp sits BELOW pre-existing annotations
-        // (notably link annotations). If it were appended at the end of the array
-        // it would be on top of the z-order and, since its rect covers the whole
-        // page, it would intercept every click and break PDF links — ReadOnly does
-        // not make annotations transparent to mouse events.
-        page.getAnnotations().add(0, stamp);
     }
 
     private void addTextStamp(
