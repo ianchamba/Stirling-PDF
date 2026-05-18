@@ -305,7 +305,12 @@ public class StampController {
         stamp.setLocked(true);
         stamp.setLockedContents(true);
 
-        page.getAnnotations().add(stamp);
+        // Insert at index 0 so the stamp sits BELOW pre-existing annotations
+        // (notably link annotations). If it were appended at the end of the array
+        // it would be on top of the z-order and, since its rect covers the whole
+        // page, it would intercept every click and break PDF links — ReadOnly does
+        // not make annotations transparent to mouse events.
+        page.getAnnotations().add(0, stamp);
     }
 
     private void addTextStamp(
