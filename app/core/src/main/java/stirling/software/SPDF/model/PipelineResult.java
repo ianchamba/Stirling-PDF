@@ -19,7 +19,9 @@ public class PipelineResult implements AutoCloseable {
     private List<TempFile> tempFiles = new ArrayList<>();
 
     public void addTempFile(TempFile tempFile) {
-        tempFiles.add(tempFile);
+        if (!tempFiles.contains(tempFile)) {
+            tempFiles.add(tempFile);
+        }
     }
 
     @Override

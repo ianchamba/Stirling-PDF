@@ -25,13 +25,13 @@ public final class OcgUtils {
     private OcgUtils() {}
 
     /**
-     * Creates an Optional Content Group registered with the document so that any content
-     * wrapped in {@code beginMarkedContent(COSName.OC, ocg) ... endMarkedContent()} is
-     * visible on screen but suppressed when the document is printed by compliant viewers.
+     * Creates an Optional Content Group registered with the document so that any content wrapped in
+     * {@code beginMarkedContent(COSName.OC, ocg) ... endMarkedContent()} is visible on screen but
+     * suppressed when the document is printed by compliant viewers.
      *
-     * <p>Sets both the Usage dictionary (declarative print/view state) and an Automatic
-     * State Adjustment entry under the default configuration so the Print event actually
-     * toggles the layer off — Usage alone is informational in some readers.
+     * <p>Sets both the Usage dictionary (declarative print/view state) and an Automatic State
+     * Adjustment entry under the default configuration so the Print event actually toggles the
+     * layer off — Usage alone is informational in some readers.
      */
     public static PDOptionalContentGroup createHideOnPrintOcg(PDDocument document, String name) {
         PDOptionalContentGroup ocg = new PDOptionalContentGroup(name);

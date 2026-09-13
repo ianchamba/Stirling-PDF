@@ -8,14 +8,28 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.security.KeyStore;
+import java.security.PrivateKey;
+import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Date;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -139,6 +153,21 @@ class CertSignControllerTest {
             is.transferTo(baos);
             derCertBytes = baos.toByteArray();
         }
+        Instant now = Instant.now();
+        pfxBytes = renewKeyStore(pfxBytes, "PKCS12", now);
+        p12Bytes = renewKeyStore(p12Bytes, "PKCS12", now);
+        jksBytes = renewKeyStore(jksBytes, "JKS", now);
+        KeyStore renewed = KeyStore.getInstance("PKCS12");
+        renewed.load(new ByteArrayInputStream(p12Bytes), "password".toCharArray());
+        Certificate certificate = renewed.getCertificate(renewed.aliases().nextElement());
+        StringWriter pem = new StringWriter();
+        try (JcaPEMWriter writer = new JcaPEMWriter(pem)) {
+            writer.writeObject(certificate);
+        }
+        pemCertBytes = pem.toString().getBytes(StandardCharsets.US_ASCII);
+        crtCertBytes = pemCertBytes;
+        cerCertBytes = pemCertBytes;
+        derCertBytes = certificate.getEncoded();
 
         lenient()
                 .when(pdfDocumentFactory.load(any(MultipartFile.class)))
@@ -147,6 +176,32 @@ class CertSignControllerTest {
                             MultipartFile file = invocation.getArgument(0);
                             return Loader.loadPDF(file.getBytes());
                         });
+    }
+
+    private static byte[] renewKeyStore(byte[] bytes, String type, Instant now) throws Exception {
+        char[] password = "password".toCharArray();
+        KeyStore store = KeyStore.getInstance(type);
+        store.load(new ByteArrayInputStream(bytes), password);
+        String alias = store.aliases().nextElement();
+        PrivateKey key = (PrivateKey) store.getKey(alias, password);
+        X509Certificate previous = (X509Certificate) store.getCertificate(alias);
+        X509Certificate certificate =
+                new JcaX509CertificateConverter()
+                        .getCertificate(
+                                new JcaX509v3CertificateBuilder(
+                                                previous.getSubjectX500Principal(),
+                                                previous.getSerialNumber(),
+                                                Date.from(now.minus(1, ChronoUnit.DAYS)),
+                                                Date.from(now.plus(30, ChronoUnit.DAYS)),
+                                                previous.getSubjectX500Principal(),
+                                                previous.getPublicKey())
+                                        .build(
+                                                new JcaContentSignerBuilder("SHA256withRSA")
+                                                        .build(key)));
+        store.setKeyEntry(alias, key, password, new Certificate[] {certificate});
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        store.store(output, password);
+        return output.toByteArray();
     }
 
     @Test

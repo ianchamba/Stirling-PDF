@@ -3,8 +3,6 @@ package stirling.software.SPDF.controller.api.security;
 import java.io.IOException;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
-import org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -75,38 +73,8 @@ public class PasswordController {
         MultipartFile fileInput = request.getFileInput();
         String ownerPassword = request.getOwnerPassword();
         String password = request.getPassword();
-        int keyLength = request.getKeyLength();
-        boolean preventAssembly = Boolean.TRUE.equals(request.getPreventAssembly());
-        boolean preventExtractContent = Boolean.TRUE.equals(request.getPreventExtractContent());
-        boolean preventExtractForAccessibility =
-                Boolean.TRUE.equals(request.getPreventExtractForAccessibility());
-        boolean preventFillInForm = Boolean.TRUE.equals(request.getPreventFillInForm());
-        boolean preventModify = Boolean.TRUE.equals(request.getPreventModify());
-        boolean preventModifyAnnotations =
-                Boolean.TRUE.equals(request.getPreventModifyAnnotations());
-        boolean preventPrinting = Boolean.TRUE.equals(request.getPreventPrinting());
-        boolean preventPrintingFaithful = Boolean.TRUE.equals(request.getPreventPrintingFaithful());
-
         try (PDDocument document = pdfDocumentFactory.load(fileInput)) {
-            AccessPermission ap = new AccessPermission();
-            ap.setCanAssembleDocument(!preventAssembly);
-            ap.setCanExtractContent(!preventExtractContent);
-            ap.setCanExtractForAccessibility(!preventExtractForAccessibility);
-            ap.setCanFillInForm(!preventFillInForm);
-            ap.setCanModify(!preventModify);
-            ap.setCanModifyAnnotations(!preventModifyAnnotations);
-            ap.setCanPrint(!preventPrinting);
-            ap.setCanPrintFaithful(!preventPrintingFaithful);
-            StandardProtectionPolicy spp =
-                    new StandardProtectionPolicy(ownerPassword, password, ap);
-
-            if ((ownerPassword != null && ownerPassword.length() > 0)
-                    || (password != null && password.length() > 0)) {
-                spp.setEncryptionKeyLength(keyLength);
-            }
-            spp.setPermissions(ap);
-            document.protect(spp);
-
+            stirling.software.SPDF.service.pdflunna.PasswordOperations.apply(document, request);
             if ((ownerPassword == null || ownerPassword.length() == 0)
                     && (password == null || password.length() == 0))
                 return WebResponseUtils.pdfDocToWebResponse(

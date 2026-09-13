@@ -1,0 +1,108 @@
+# PDF Lunna API profile. Keep authentication and PDFBox; omit the web UI and
+# optional conversion services. Build from the fork containing its OCG patches.
+FROM ubuntu:noble@sha256:c4a8d5503dfb2a3eb8ab5f807da5bc69a85730fb49b5cfca2330194ebcc41c7b AS qpdf-build
+
+# Stirling requires QPDF >= 12; Ubuntu Noble's 11.9 package is disabled at runtime.
+# Match the fork's full base image version and verify the upstream source archive.
+ARG QPDF_VERSION=12.3.2
+ARG QPDF_SHA256=6cba2f9f2cd887d905faeb99e0e51a307b217920d1bbf3e9cfbb2e8178a2deda
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      build-essential cmake libssl-dev libjpeg-dev zlib1g-dev curl ca-certificates pkg-config \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL --max-time 300 --retry 3 \
+      "https://github.com/qpdf/qpdf/releases/download/v${QPDF_VERSION}/qpdf-${QPDF_VERSION}.tar.gz" \
+      -o /tmp/qpdf.tar.gz \
+    && printf '%s  %s\n' "${QPDF_SHA256}" /tmp/qpdf.tar.gz | sha256sum -c - \
+    && tar -xzf /tmp/qpdf.tar.gz -C /tmp \
+    && cmake -S "/tmp/qpdf-${QPDF_VERSION}" -B /tmp/qpdf-build \
+      -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+      -DREQUIRE_CRYPTO_OPENSSL=ON -DDEFAULT_CRYPTO=openssl \
+    && cmake --build /tmp/qpdf-build --target qpdf --parallel 2 \
+    && install -m 755 /tmp/qpdf-build/qpdf/qpdf /usr/local/bin/qpdf \
+    && strip /usr/local/bin/qpdf \
+    && /usr/local/bin/qpdf --version
+
+FROM gradle:9.3.1-jdk25@sha256:85aec999629f4774a383cb792da4b598bdf5a7e69c4b9570bb70c0f919179183 AS app-build
+
+WORKDIR /app
+ENV DISABLE_ADDITIONAL_FEATURES=false \
+    DOCKER_ENABLE_SECURITY=true
+
+COPY . .
+# No Node.js, npm, Task or Python is needed for an API-only Java build.
+# Checks run separately; packaging must not reformat the source checkout.
+RUN gradle :stirling-pdf:bootJar buildRestartHelper \
+      -PbuildWithFrontend=false -PnoSpotless --no-daemon
+
+FROM eclipse-temurin:25-jre-noble@sha256:b27ca47660a8fa837e47a8533b9b1a3a430295cf29ca28d91af4fd121572dc29
+
+ARG VERSION_TAG=pdflunna-local
+ARG SOURCE_REVISION=unknown
+
+LABEL org.opencontainers.image.title="Stirling-PDF for PDF Lunna" \
+      org.opencontainers.image.description="Authenticated PDF API with PDFBox, QPDF and Ghostscript" \
+      org.opencontainers.image.source="https://github.com/ianchamba/Stirling-PDF" \
+      org.opencontainers.image.version="${VERSION_TAG}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}"
+
+# Distribution packages receive their distribution's security updates on rebuild.
+# Do not add the full Stirling base image: it includes the services omitted here.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      ca-certificates tzdata tini bash curl passwd util-linux procps \
+      fontconfig fonts-dejavu-core fonts-liberation2 fonts-noto-core \
+      ghostscript libssl3t64 libjpeg-turbo8 zlib1g libstdc++6 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r stirlingpdfgroup \
+    && useradd -r -m -g stirlingpdfgroup -d /home/stirlingpdfuser -s /bin/bash stirlingpdfuser \
+    && mkdir -p /app /configs/cache /configs/heap_dumps /logs /customFiles \
+      /pipeline/watchedFolders /pipeline/finishedFolders /tmp/stirling-pdf/heap_dumps \
+    && chown -R stirlingpdfuser:stirlingpdfgroup /app /configs /logs /customFiles /pipeline /tmp/stirling-pdf \
+    && chmod 750 /tmp/stirling-pdf /tmp/stirling-pdf/heap_dumps
+
+WORKDIR /app
+COPY --from=qpdf-build /usr/local/bin/qpdf /usr/local/bin/qpdf
+COPY --from=app-build /app/app/core/build/libs/*.jar /app.jar
+COPY --from=app-build /app/build/libs/restart-helper.jar /restart-helper.jar
+COPY scripts/init-without-ocr.sh scripts/stirling-diagnostics.sh /scripts/
+COPY app/core/src/main/resources/static/fonts/*.ttf /usr/share/fonts/truetype/
+
+RUN sed -i 's/\r$//' /scripts/*.sh \
+    && chmod +x /scripts/*.sh \
+    && ln -s /logs /app/logs \
+    && ln -s /configs /app/configs \
+    && ln -s /customFiles /app/customFiles \
+    && ln -s /pipeline /app/pipeline \
+    && fc-cache -f \
+    && printf '%s\n' "${VERSION_TAG}" > /etc/stirling_version \
+    && qpdf --version \
+    && gs --version
+
+ENV VERSION_TAG=${VERSION_TAG} \
+    DISABLE_ADDITIONAL_FEATURES=false \
+    DOCKER_ENABLE_SECURITY=true \
+    SECURITY_ENABLELOGIN=true \
+    AIENGINE_ENABLED=false \
+    PROCESSEXECUTOR_AUTOUNOSERVER=false \
+    PROCESS_EXECUTOR_AUTO_UNO_SERVER=false \
+    STIRLING_AOT_ENABLE=false \
+    STIRLING_JVM_PROFILE=balanced \
+    JAVA_CUSTOM_OPTS="" \
+    HOME=/home/stirlingpdfuser \
+    PUID=1000 \
+    PGID=1000 \
+    UMASK=027 \
+    STIRLING_TEMPFILES_DIRECTORY=/tmp/stirling-pdf \
+    TMPDIR=/tmp/stirling-pdf \
+    TEMP=/tmp/stirling-pdf \
+    TMP=/tmp/stirling-pdf
+
+# Reuse upstream memory sizing, UID/GID setup and Java lifecycle handling.
+# With no Xvfb/UNO binaries installed, only the Java service is started.
+EXPOSE 8080/tcp
+STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=30s --timeout=15s --start-period=120s --retries=5 \
+  CMD curl -fs --max-time 10 http://localhost:8080${SYSTEM_ROOTURIPATH:-''}/api/v1/info/status || exit 1
+ENTRYPOINT ["tini", "--", "/scripts/init-without-ocr.sh"]
+CMD []

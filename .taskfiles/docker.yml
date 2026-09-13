@@ -20,6 +20,11 @@ tasks:
     cmds:
       - docker build -t stirling-pdf-ultra-lite -f {{.EMBEDDED_DIR}}/Dockerfile.ultra-lite .
 
+  build:pdflunna:
+    desc: "Build PDF Lunna API image"
+    cmds:
+      - docker build -t stirling-pdf-pdflunna:local -f {{.EMBEDDED_DIR}}/Dockerfile.pdflunna .
+
   build:frontend:
     desc: "Build frontend-only Docker image"
     cmds:

@@ -1,6 +1,7 @@
 package stirling.software.SPDF.controller.api.pipeline;
 
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
@@ -76,67 +77,81 @@ public class PipelineController {
 
         postHogService.captureEvent("pipeline_api_event", properties);
 
+        List<Resource> inputFiles = null;
         try {
-            List<Resource> inputFiles = processor.generateInputFiles(files);
+            inputFiles = processor.generateInputFiles(files);
             if (inputFiles == null || inputFiles.isEmpty()) {
                 return null;
             }
-            PipelineResult result = processor.runPipelineAgainstFiles(inputFiles, config);
-            List<Resource> outputFiles = result.getOutputFiles();
-            if (outputFiles != null && outputFiles.size() == 1) {
-                // If there is only one file, return it directly — stream without int-overflow
-                Resource singleFile = outputFiles.get(0);
-                TempFile singleTempFile = new TempFile(tempFileManager, ".out");
-                try {
-                    try (InputStream is = singleFile.getInputStream()) {
-                        is.transferTo(Files.newOutputStream(singleTempFile.getPath()));
+            try (PipelineResult result = processor.runPipelineAgainstFiles(inputFiles, config)) {
+                List<Resource> outputFiles = result.getOutputFiles();
+                if (outputFiles != null && outputFiles.size() == 1) {
+                    // If there is only one file, return it directly — stream without int-overflow
+                    Resource singleFile = outputFiles.get(0);
+                    TempFile singleTempFile = new TempFile(tempFileManager, ".out");
+                    try {
+                        try (InputStream is = singleFile.getInputStream();
+                                OutputStream output =
+                                        Files.newOutputStream(singleTempFile.getPath())) {
+                            is.transferTo(output);
+                        }
+                        log.info("Returning single file response...");
+                        return WebResponseUtils.fileToWebResponse(
+                                singleTempFile,
+                                singleFile.getFilename(),
+                                MediaType.APPLICATION_OCTET_STREAM);
+                    } catch (Exception e) {
+                        singleTempFile.close();
+                        throw e;
                     }
-                    log.info("Returning single file response...");
-                    return WebResponseUtils.fileToWebResponse(
-                            singleTempFile,
-                            singleFile.getFilename(),
-                            MediaType.APPLICATION_OCTET_STREAM);
+                } else if (outputFiles == null) {
+                    return null;
+                }
+                // Multiple files: stream into a zip TempFile
+                TempFile zipTempFile = new TempFile(tempFileManager, ".zip");
+                try {
+                    Map<String, Integer> filenameCount = new HashMap<>();
+                    try (ZipOutputStream zipOut =
+                            new ZipOutputStream(Files.newOutputStream(zipTempFile.getPath()))) {
+                        for (Resource file : outputFiles) {
+                            String originalFilename = file.getFilename();
+                            String filename = originalFilename;
+                            if (filenameCount.containsKey(originalFilename)) {
+                                int count = filenameCount.get(originalFilename);
+                                filename =
+                                        GeneralUtils.generateFilename(
+                                                originalFilename, "(" + count + ")");
+                                filenameCount.put(originalFilename, count + 1);
+                            } else {
+                                filenameCount.put(originalFilename, 1);
+                            }
+                            zipOut.putNextEntry(new ZipEntry(filename));
+                            try (InputStream is = file.getInputStream()) {
+                                is.transferTo(zipOut);
+                            }
+                            zipOut.closeEntry();
+                        }
+                    }
+                    log.info("Returning zipped file response...");
+                    return WebResponseUtils.zipFileToWebResponse(zipTempFile, "output.zip");
                 } catch (Exception e) {
-                    singleTempFile.close();
+                    zipTempFile.close();
                     throw e;
                 }
-            } else if (outputFiles == null) {
-                return null;
-            }
-            // Multiple files: stream into a zip TempFile
-            TempFile zipTempFile = new TempFile(tempFileManager, ".zip");
-            try {
-                Map<String, Integer> filenameCount = new HashMap<>();
-                try (ZipOutputStream zipOut =
-                        new ZipOutputStream(Files.newOutputStream(zipTempFile.getPath()))) {
-                    for (Resource file : outputFiles) {
-                        String originalFilename = file.getFilename();
-                        String filename = originalFilename;
-                        if (filenameCount.containsKey(originalFilename)) {
-                            int count = filenameCount.get(originalFilename);
-                            filename =
-                                    GeneralUtils.generateFilename(
-                                            originalFilename, "(" + count + ")");
-                            filenameCount.put(originalFilename, count + 1);
-                        } else {
-                            filenameCount.put(originalFilename, 1);
-                        }
-                        zipOut.putNextEntry(new ZipEntry(filename));
-                        try (InputStream is = file.getInputStream()) {
-                            is.transferTo(zipOut);
-                        }
-                        zipOut.closeEntry();
-                    }
-                }
-                log.info("Returning zipped file response...");
-                return WebResponseUtils.zipFileToWebResponse(zipTempFile, "output.zip");
-            } catch (Exception e) {
-                zipTempFile.close();
-                throw e;
             }
         } catch (Exception e) {
             log.error("Error handling data: ", e);
             return null;
+        } finally {
+            if (inputFiles != null) {
+                for (Resource inputFile : inputFiles) {
+                    try {
+                        tempFileManager.deleteTempFile(inputFile.getFile());
+                    } catch (Exception e) {
+                        log.warn("Could not clean up pipeline upload", e);
+                    }
+                }
+            }
         }
     }
 }

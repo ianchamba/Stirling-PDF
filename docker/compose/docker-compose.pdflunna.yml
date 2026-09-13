@@ -1,0 +1,59 @@
+name: pdflunna
+
+services:
+  stirling-pdf:
+    image: ${PDFLUNNA_IMAGE:-stirling-pdf-pdflunna:local}
+    build:
+      context: ../..
+      dockerfile: docker/embedded/Dockerfile.pdflunna
+      args:
+        VERSION_TAG: ${PDFLUNNA_VERSION:-pdflunna-local}
+        SOURCE_REVISION: ${PDFLUNNA_REVISION:-unknown}
+    restart: unless-stopped
+    stop_grace_period: 45s
+    # Starting limits for measurement, not a sizing result for the production VPS.
+    mem_limit: ${PDFLUNNA_MEMORY_LIMIT:-2g}
+    cpus: ${PDFLUNNA_CPU_LIMIT:-1.0}
+    ports:
+      - "127.0.0.1:${PDFLUNNA_PORT:-8080}:8080"
+    environment:
+      DISABLE_ADDITIONAL_FEATURES: "false"
+      DOCKER_ENABLE_SECURITY: "true"
+      SECURITY_ENABLELOGIN: "true"
+      SECURITY_INITIALLOGIN_USERNAME: ${PDFLUNNA_ADMIN_USERNAME:-pdflunna-admin}
+      SECURITY_INITIALLOGIN_PASSWORD: ${PDFLUNNA_ADMIN_PASSWORD:?Set PDFLUNNA_ADMIN_PASSWORD in your private env file}
+      SECURITY_CUSTOMGLOBALAPIKEY: ${PDFLUNNA_API_KEY:?Set PDFLUNNA_API_KEY in your private env file}
+      AIENGINE_ENABLED: "false"
+      PROCESSEXECUTOR_AUTOUNOSERVER: "false"
+      PROCESS_EXECUTOR_AUTO_UNO_SERVER: "false"
+      PROCESSEXECUTOR_SESSIONLIMIT_QPDFSESSIONLIMIT: ${PDFLUNNA_QPDF_CONCURRENCY:-1}
+      PROCESSEXECUTOR_SESSIONLIMIT_GHOSTSCRIPTSESSIONLIMIT: ${PDFLUNNA_GS_CONCURRENCY:-1}
+      PDFLUNNA_PROCESSING_MAX_CONCURRENT: ${PDFLUNNA_PROCESSING_MAX_CONCURRENT:-1}
+      PDFLUNNA_PROCESSING_MAX_QUEUED: ${PDFLUNNA_PROCESSING_MAX_QUEUED:-4}
+      PDFLUNNA_PROCESSING_QUEUE_TIMEOUT_SECONDS: ${PDFLUNNA_PROCESSING_QUEUE_TIMEOUT_SECONDS:-30}
+      STIRLING_AOT_ENABLE: "false"
+      STIRLING_JVM_PROFILE: balanced
+      # Reserve room for metaspace, native PDF buffers and external PDF processes.
+      JAVA_CUSTOM_OPTS: ${PDFLUNNA_JAVA_OPTS:--XX:InitialRAMPercentage=10 -XX:MaxRAMPercentage=55}
+      PUID: ${PDFLUNNA_UID:-1000}
+      PGID: ${PDFLUNNA_GID:-1000}
+    volumes:
+      - pdflunna-configs:/configs
+      - pdflunna-logs:/logs
+      - pdflunna-custom-files:/customFiles
+      - pdflunna-pipeline:/pipeline
+      # Disk-backed temp files avoid charging a large tmpfs against the RAM limit.
+      - pdflunna-temp:/tmp/stirling-pdf
+    networks:
+      - pdflunna
+
+networks:
+  pdflunna:
+    driver: bridge
+
+volumes:
+  pdflunna-configs:
+  pdflunna-logs:
+  pdflunna-custom-files:
+  pdflunna-pipeline:
+  pdflunna-temp:

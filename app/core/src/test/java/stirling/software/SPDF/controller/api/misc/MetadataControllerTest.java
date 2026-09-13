@@ -50,21 +50,27 @@ class MetadataControllerTest {
 
     @Test
     void testCheckUndefined_returnsNullForUndefined() throws Exception {
-        var method = MetadataController.class.getDeclaredMethod("checkUndefined", String.class);
+        var method =
+                stirling.software.SPDF.service.pdflunna.MetadataOperations.class.getDeclaredMethod(
+                        "checkUndefined", String.class);
         method.setAccessible(true);
         assertNull(method.invoke(metadataController, "undefined"));
     }
 
     @Test
     void testCheckUndefined_returnsValueForNonUndefined() throws Exception {
-        var method = MetadataController.class.getDeclaredMethod("checkUndefined", String.class);
+        var method =
+                stirling.software.SPDF.service.pdflunna.MetadataOperations.class.getDeclaredMethod(
+                        "checkUndefined", String.class);
         method.setAccessible(true);
         assertEquals("hello", method.invoke(metadataController, "hello"));
     }
 
     @Test
     void testCheckUndefined_returnsNullForNull() throws Exception {
-        var method = MetadataController.class.getDeclaredMethod("checkUndefined", String.class);
+        var method =
+                stirling.software.SPDF.service.pdflunna.MetadataOperations.class.getDeclaredMethod(
+                        "checkUndefined", String.class);
         method.setAccessible(true);
         assertNull(method.invoke(metadataController, (String) null));
     }
