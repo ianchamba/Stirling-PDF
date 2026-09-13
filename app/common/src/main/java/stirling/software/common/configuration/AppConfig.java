@@ -205,6 +205,11 @@ public class AppConfig {
         return "Stirling-PDF" + " v" + appVersion();
     }
 
+    @Bean(name = "PdfProducerLabel")
+    public String pdfProducerLabel() {
+        return "Hostbraza v" + appVersion();
+    }
+
     @Bean(name = "UUID")
     public String uuid() {
         return applicationProperties.getAutomaticallyGenerated().getUUID();

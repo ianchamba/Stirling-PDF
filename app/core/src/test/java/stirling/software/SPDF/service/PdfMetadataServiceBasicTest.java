@@ -28,6 +28,7 @@ class PdfMetadataServiceBasicTest {
 
     private PdfMetadataService pdfMetadataService;
     private static final String STIRLING_PDF_LABEL = "Stirling PDF";
+    private static final String PDF_PRODUCER_LABEL = "Hostbraza v2.11.0";
 
     @BeforeEach
     void setUp() {
@@ -47,6 +48,7 @@ class PdfMetadataServiceBasicTest {
                 new PdfMetadataService(
                         applicationProperties,
                         STIRLING_PDF_LABEL,
+                        PDF_PRODUCER_LABEL,
                         false, // not running Pro or higher
                         userService);
     }
@@ -114,6 +116,6 @@ class PdfMetadataServiceBasicTest {
 
         // Verify basic calls
         verify(testInfo, times(1)).setModificationDate(any(Calendar.class));
-        verify(testInfo, times(1)).setProducer(STIRLING_PDF_LABEL);
+        verify(testInfo, times(1)).setProducer(PDF_PRODUCER_LABEL);
     }
 }

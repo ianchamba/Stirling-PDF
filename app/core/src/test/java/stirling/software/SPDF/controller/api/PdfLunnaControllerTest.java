@@ -68,7 +68,10 @@ class PdfLunnaControllerTest {
     void setUp() {
         ApplicationProperties properties = new ApplicationProperties();
         properties.getSystem().getTempFileManagement().setBaseTmpDir(directory.toString());
-        metadata = spy(new PdfMetadataService(properties, "Stirling PDF", false, null));
+        metadata =
+                spy(
+                        new PdfMetadataService(
+                                properties, "Stirling PDF", "Hostbraza v2.11.0", false, null));
         tempFiles = spy(new TempFileManager(new TempFileRegistry(), properties));
         factory = spy(new CustomPDFDocumentFactory(metadata, tempFiles));
         endpoints = mock(EndpointConfiguration.class);
@@ -114,6 +117,12 @@ class PdfLunnaControllerTest {
                                                 "Purchased book",
                                                 "author",
                                                 "Shop",
+                                                "creationDate",
+                                                "2026/09/13 12:00:00",
+                                                "creator",
+                                                "https://hostbraza.com.br",
+                                                "producer",
+                                                "https://web.lunnadesign.com.br",
                                                 "subject",
                                                 "traceable-subject",
                                                 "pdflunna_email_hash",
@@ -148,6 +157,9 @@ class PdfLunnaControllerTest {
             assertFalse(document.getCurrentAccessPermission().canModifyAnnotations());
             assertTrue(document.getCurrentAccessPermission().canPrint());
             assertEquals("Purchased book", document.getDocumentInformation().getTitle());
+            assertEquals("Hostbraza v2.11.0", document.getDocumentInformation().getProducer());
+            assertEquals(
+                    "https://hostbraza.com.br", document.getDocumentInformation().getCreator());
             assertEquals(
                     "customer-hash",
                     document.getDocumentInformation()

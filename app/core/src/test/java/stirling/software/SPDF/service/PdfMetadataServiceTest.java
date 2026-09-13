@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -34,6 +35,7 @@ class PdfMetadataServiceTest {
     @Mock private UserServiceInterface userService;
     private PdfMetadataService pdfMetadataService;
     private static final String STIRLING_PDF_LABEL = "Stirling PDF";
+    private static final String PDF_PRODUCER_LABEL = "Hostbraza v2.11.0";
 
     @BeforeEach
     void setUp() {
@@ -53,6 +55,7 @@ class PdfMetadataServiceTest {
                 new PdfMetadataService(
                         applicationProperties,
                         STIRLING_PDF_LABEL,
+                        PDF_PRODUCER_LABEL,
                         false, // not running Pro or higher
                         userService);
     }
@@ -122,7 +125,7 @@ class PdfMetadataServiceTest {
         // Verify the right calls were made to the document info
         // We only need to verify some of the basic setters were called
         verify(testInfo).setTitle(any());
-        verify(testInfo).setProducer(STIRLING_PDF_LABEL);
+        verify(testInfo).setProducer(PDF_PRODUCER_LABEL);
         verify(testInfo).setModificationDate(any(Calendar.class));
     }
 
@@ -149,7 +152,7 @@ class PdfMetadataServiceTest {
         verify(testInfo).setCreator(STIRLING_PDF_LABEL);
         verify(testInfo).setCreationDate(org.mockito.ArgumentMatchers.any(Calendar.class));
         verify(testInfo).setTitle("Test Title");
-        verify(testInfo).setProducer(STIRLING_PDF_LABEL);
+        verify(testInfo).setProducer(PDF_PRODUCER_LABEL);
         verify(testInfo).setSubject("Test Subject");
         verify(testInfo).setKeywords("Test Keywords");
         verify(testInfo).setModificationDate(org.mockito.ArgumentMatchers.any(Calendar.class));
@@ -168,6 +171,7 @@ class PdfMetadataServiceTest {
                 new PdfMetadataService(
                         applicationProperties,
                         STIRLING_PDF_LABEL,
+                        PDF_PRODUCER_LABEL,
                         true, // running Pro version
                         userService);
 
@@ -188,7 +192,7 @@ class PdfMetadataServiceTest {
         // Assert - verify only once for each call
         verify(testInfo).setCreator("Pro Creator");
         verify(testInfo).setAuthor("Pro Author testUser");
-        // We don't verify setProducer here to avoid the "Too many actual invocations" error
+        verify(testInfo, times(2)).setProducer(PDF_PRODUCER_LABEL);
     }
 
     @Test
@@ -218,7 +222,7 @@ class PdfMetadataServiceTest {
 
         // Assert - should NOT set a new creation date
         verify(testInfo).setTitle("Test Title");
-        verify(testInfo).setProducer(STIRLING_PDF_LABEL);
+        verify(testInfo).setProducer(PDF_PRODUCER_LABEL);
         verify(testInfo).setSubject("Test Subject");
         verify(testInfo).setKeywords("Test Keywords");
         verify(testInfo).setModificationDate(org.mockito.ArgumentMatchers.any(Calendar.class));

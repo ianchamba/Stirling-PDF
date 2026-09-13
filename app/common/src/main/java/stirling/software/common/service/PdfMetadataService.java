@@ -19,16 +19,19 @@ public class PdfMetadataService {
 
     private final ApplicationProperties applicationProperties;
     private final String stirlingPDFLabel;
+    private final String pdfProducerLabel;
     private final UserServiceInterface userService;
     private final boolean runningProOrHigher;
 
     public PdfMetadataService(
             ApplicationProperties applicationProperties,
             @Qualifier("StirlingPDFLabel") String stirlingPDFLabel,
+            @Qualifier("PdfProducerLabel") String pdfProducerLabel,
             @Qualifier("runningProOrHigher") boolean runningProOrHigher,
             @Autowired(required = false) UserServiceInterface userService) {
         this.applicationProperties = applicationProperties;
         this.stirlingPDFLabel = stirlingPDFLabel;
+        this.pdfProducerLabel = pdfProducerLabel;
         this.userService = userService;
         this.runningProOrHigher = runningProOrHigher;
     }
@@ -127,7 +130,7 @@ public class PdfMetadataService {
                             .getProFeatures()
                             .getCustomMetadata()
                             .getCreator();
-            pdf.getDocumentInformation().setProducer(stirlingPDFLabel);
+            pdf.getDocumentInformation().setProducer(pdfProducerLabel);
         }
 
         pdf.getDocumentInformation().setCreator(creator);
@@ -143,7 +146,7 @@ public class PdfMetadataService {
     private void setCommonMetadata(PDDocument pdf, PdfMetadata pdfMetadata) {
         String title = pdfMetadata.getTitle();
         pdf.getDocumentInformation().setTitle(title);
-        pdf.getDocumentInformation().setProducer(stirlingPDFLabel);
+        pdf.getDocumentInformation().setProducer(pdfProducerLabel);
         pdf.getDocumentInformation().setSubject(pdfMetadata.getSubject());
         pdf.getDocumentInformation().setKeywords(pdfMetadata.getKeywords());
 
