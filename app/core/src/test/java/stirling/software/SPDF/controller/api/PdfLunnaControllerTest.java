@@ -412,6 +412,113 @@ class PdfLunnaControllerTest {
         }
     }
 
+    @Test
+    void semanticSelectionAppliesToStampAndTileInOneDocumentPass() throws Exception {
+        for (String mode : List.of("last", "alternate", "custom")) {
+            clearInvocations(factory);
+            var input = pdf(false);
+            var request =
+                    request(
+                            input,
+                            List.of(
+                                    operation(
+                                            "/api/v1/misc/update-metadata",
+                                            Map.of("title", "Selected book")),
+                                    operation(
+                                            "/api/v1/misc/add-stamp",
+                                            Map.of(
+                                                    "stampType",
+                                                    "text",
+                                                    "stampText",
+                                                    "Selected stamp",
+                                                    "fontSize",
+                                                    12,
+                                                    "opacity",
+                                                    1,
+                                                    "position",
+                                                    8,
+                                                    "customMargin",
+                                                    "small",
+                                                    "alphabet",
+                                                    "roman",
+                                                    "customColor",
+                                                    "#333333",
+                                                    "pageNumbers",
+                                                    "1")),
+                                    operation(
+                                            "/api/v1/security/add-watermark",
+                                            Map.of(
+                                                    "watermarkType",
+                                                    "text",
+                                                    "watermarkText",
+                                                    "Selected tile",
+                                                    "fontSize",
+                                                    12,
+                                                    "opacity",
+                                                    1,
+                                                    "alphabet",
+                                                    "roman",
+                                                    "customColor",
+                                                    "#333333",
+                                                    "widthSpacer",
+                                                    100,
+                                                    "heightSpacer",
+                                                    100)),
+                                    operation(
+                                            "/api/v1/security/add-password",
+                                            Map.of(
+                                                    "ownerPassword",
+                                                    "owner",
+                                                    "keyLength",
+                                                    256,
+                                                    "preventModify",
+                                                    true))));
+            request.setWatermarkPages(mode);
+            request.setWatermarkPagesAlternate("even");
+            request.setWatermarkPagesMode("exclude");
+            request.setWatermarkPagesCustom("1-3");
+            try (PDDocument document = Loader.loadPDF(drain(controller.personalize(request)))) {
+                assertEquals("Selected book", document.getDocumentInformation().getTitle());
+                assertFalse(document.getCurrentAccessPermission().canModify());
+                assertEquals(3, document.getNumberOfPages());
+                for (int page = 1; page <= 3; page++) {
+                    var stripper = new PDFTextStripper();
+                    stripper.setStartPage(page);
+                    stripper.setEndPage(page);
+                    String text = stripper.getText(document);
+                    boolean selected =
+                            ("last".equals(mode) && page == 3)
+                                    || ("alternate".equals(mode) && page == 2);
+                    assertEquals(selected, text.contains("Selected stamp"));
+                    assertEquals(selected, text.contains("Selected tile"));
+                    assertTrue(text.contains("Original selectable text " + page));
+                    assertEquals(1, document.getPage(page - 1).getAnnotations().size());
+                }
+            }
+            verify(factory, times(1)).load(input, true);
+        }
+        assertTrue(
+                ((List<?>) controller.capabilities().get("features"))
+                        .contains("semanticPageSelection"));
+    }
+
+    @Test
+    void invalidSemanticPageSelectionIsRejectedBeforeLoading() throws Exception {
+        var request =
+                request(
+                        pdf(false),
+                        List.of(
+                                operation(
+                                        "/api/v1/misc/update-metadata", Map.of("title", "Book"))));
+        request.setWatermarkPages("custom");
+        request.setWatermarkPagesCustom("5-1");
+        assertEquals(
+                HttpStatus.BAD_REQUEST,
+                assertThrows(ResponseStatusException.class, () -> controller.personalize(request))
+                        .getStatusCode());
+        verifyNoInteractions(factory);
+    }
+
     private PdfLunnaPersonalizeRequest request(
             MockMultipartFile pdf, List<Map<String, Object>> operations) {
         var request = new PdfLunnaPersonalizeRequest();

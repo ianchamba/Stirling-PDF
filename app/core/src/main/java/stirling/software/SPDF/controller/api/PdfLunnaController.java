@@ -39,6 +39,7 @@ import stirling.software.SPDF.model.api.security.AddWatermarkRequest;
 import stirling.software.SPDF.service.pdflunna.MetadataOperations;
 import stirling.software.SPDF.service.pdflunna.PasswordOperations;
 import stirling.software.SPDF.service.pdflunna.PdfLunnaAdmission;
+import stirling.software.SPDF.service.pdflunna.PdfLunnaPageSelection;
 import stirling.software.SPDF.service.pdflunna.StampOperations;
 import stirling.software.SPDF.service.pdflunna.WatermarkOperations;
 import stirling.software.common.model.api.PDFFile;
@@ -78,7 +79,7 @@ public class PdfLunnaController {
                 "supportedOperations",
                 SUPPORTED.stream().filter(endpointConfiguration::isEndpointEnabledForUri).toList(),
                 "features",
-                List.of("singleDocumentPass", "imageUploads"),
+                List.of("singleDocumentPass", "imageUploads", "semanticPageSelection"),
                 "maxOperations",
                 MAX_OPERATIONS,
                 "supportsRasterization",
@@ -103,9 +104,17 @@ public class PdfLunnaController {
             throws IOException {
         requireUpload(request.getFileInput());
         List<PreparedOperation> operations = prepare(request);
+        PdfLunnaPageSelection selection = PdfLunnaPageSelection.from(request);
         try (var permit = admission.acquire();
                 PDDocument document = pdfDocumentFactory.load(request.getFileInput(), true)) {
+            List<Integer> selectedPages =
+                    selection == null ? null : selection.resolve(document.getNumberOfPages());
             for (PreparedOperation operation : operations) {
+                if (selectedPages != null
+                        && selectedPages.isEmpty()
+                        && (STAMP.equals(operation.path()) || WATERMARK.equals(operation.path()))) {
+                    continue;
+                }
                 if (!METADATA.equals(operation.path())) {
                     // Match the post-load behavior of the original individual tool endpoints.
                     pdfMetadataService.setDefaultMetadata(document);
@@ -118,10 +127,13 @@ public class PdfLunnaController {
                             MetadataOperations.apply(
                                     document, (MetadataRequest) operation.request());
                     case STAMP ->
-                            StampOperations.apply(document, (AddStampRequest) operation.request());
+                            StampOperations.apply(
+                                    document, (AddStampRequest) operation.request(), selectedPages);
                     case WATERMARK ->
                             WatermarkOperations.apply(
-                                    document, (AddWatermarkRequest) operation.request());
+                                    document,
+                                    (AddWatermarkRequest) operation.request(),
+                                    selectedPages);
                     case PASSWORD ->
                             PasswordOperations.apply(
                                     document, (AddPasswordRequest) operation.request());

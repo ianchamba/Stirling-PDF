@@ -42,6 +42,11 @@ public class StampOperations {
     private static final String ESCAPED_AT_PLACEHOLDER = "\uE000ESCAPED_AT\uE000";
 
     public void apply(PDDocument document, AddStampRequest request) throws IOException {
+        apply(document, request, null);
+    }
+
+    public void apply(PDDocument document, AddStampRequest request, List<Integer> selectedPages)
+            throws IOException {
         MultipartFile pdfFile = request.getFileInput();
         String pdfFileName = pdfFile.getOriginalFilename();
         if (pdfFileName.contains("..") || pdfFileName.startsWith("/")) {
@@ -93,7 +98,8 @@ public class StampOperations {
                 "image".equalsIgnoreCase(stampType)
                         ? DocumentImageResources.loadImage(document, stampImage)
                         : null;
-        List<Integer> pageNumbers = request.getPageNumbersList(document, true);
+        List<Integer> pageNumbers =
+                selectedPages == null ? request.getPageNumbersList(document, true) : selectedPages;
 
         // One OCG for the whole document keeps the layers panel tidy and lets the
         // stamp stay in the page content stream — URL auto-detection, text selection

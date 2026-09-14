@@ -9,6 +9,39 @@ O ganho esperado desta imagem e reduzir tamanho, servicos ociosos e custo de
 inicializacao. O tempo de personalizacao depende tambem dos PDFs e da concorrencia.
 Os limites abaixo sao pontos de partida; ainda precisam de medicao na VPS.
 
+## Protocolo de paginas sem consulta adicional
+
+`GET /api/v1/pdflunna/capabilities` anuncia `semanticPageSelection` em `features`.
+Clientes que encontrarem esse recurso podem enviar, junto com o multipart de
+`POST /api/v1/pdflunna/personalize`, os campos:
+
+| Campo | Valores |
+| --- | --- |
+| `watermarkPages` | `all`, `first`, `last`, `custom` ou `alternate` |
+| `watermarkPagesMode` | `include` (padrao) ou `exclude`, para `custom` |
+| `watermarkPagesCustom` | Paginas iniciando em 1 e intervalos crescentes: `1,3-5` |
+| `watermarkPagesAlternate` | `odd` (padrao) ou `even`, para `alternate` |
+
+A selecao e resolvida uma vez, usando o PDF ja aberto para personalizacao, e vale
+para todas as operacoes de carimbo e marca em mosaico (texto ou imagem) do pipeline.
+Nao requer upload separado para contar paginas. Omitir `watermarkPages` preserva
+o comportamento legado dos parametros individuais, inclusive `pageNumbers` do
+carimbo. Os endpoints individuais existentes continuam compativeis.
+
+Intervalos sao limitados ao numero de paginas do documento antes da expansao.
+Excluir todas as paginas ou selecionar pares em um PDF de uma pagina resulta em
+nenhuma marca; metadados e senha continuam sendo aplicados. A API nunca converte
+uma selecao vazia em todas as paginas. Sintaxe invalida, selecao desconhecida ou
+`custom` vazio retorna 400 antes de abrir o PDF. O cliente pode converter uma
+configuracao customizada vazia para `all` quando essa for a intencao da interface.
+A expressao personalizada tem limite de 8.192 caracteres e 1.000 intervalos.
+
+## Autenticacao
+
+O perfil usa a autenticacao `X-API-KEY` do Stirling. A verificacao de licenca Pro
+e a escolha entre processamento local e remoto ficam no plugin WordPress.
+O servidor nao consulta o licenciamento do PDFLunna.
+
 ## Construir
 
 Na raiz do repositorio, com Docker Engine Linux funcionando:

@@ -3,6 +3,7 @@ package stirling.software.SPDF.service.pdflunna;
 import java.awt.*;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -26,6 +27,11 @@ public class WatermarkOperations {
     private static final long MAX_MARKS_PER_PAGE = 10_000;
 
     public void apply(PDDocument document, AddWatermarkRequest request) throws IOException {
+        apply(document, request, null);
+    }
+
+    public void apply(PDDocument document, AddWatermarkRequest request, List<Integer> selectedPages)
+            throws IOException {
         MultipartFile pdfFile = request.getFileInput();
         String pdfFileName = pdfFile.getOriginalFilename();
         if (pdfFileName != null && (pdfFileName.contains("..") || pdfFileName.startsWith("/"))) {
@@ -62,8 +68,11 @@ public class WatermarkOperations {
         PDOptionalContentGroup hideOnPrintOcg =
                 hideOnPrint ? OcgUtils.createHideOnPrintOcg(document, "Watermark") : null;
 
-        // Create a page in the document
-        for (PDPage page : document.getPages()) {
+        Iterable<PDPage> pages =
+                selectedPages == null
+                        ? document.getPages()
+                        : selectedPages.stream().map(page -> document.getPage(page - 1)).toList();
+        for (PDPage page : pages) {
             // Get the page's content stream
             try (PDPageContentStream contentStream =
                     new PDPageContentStream(
