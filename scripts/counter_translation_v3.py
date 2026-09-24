@@ -1,12 +1,11 @@
 """
-A script to update language progress status in README.md based on
+A script to calculate language progress status based on
 frontend locale TOML file comparisons.
 
 This script compares the default (reference) TOML file,
 `frontend/public/locales/en-GB/translation.toml`, with other translation
 files in `frontend/public/locales/*/translation.toml`.
-It determines how many keys are fully translated and automatically updates
-progress badges in the `README.md`.
+It determines how many keys are fully translated and reports coverage in the console.
 
 Additionally, it maintains a TOML configuration file
 (`scripts/ignore_translation.toml`) that defines which keys are ignored
@@ -17,12 +16,11 @@ Author: Ludy87
 Usage:
     Run this script directly from the project root.
 
-    # --- Compare all translation files and update README.md ---
+    # --- Compare all translation files ---
     $ python scripts/counter_translation_v3.py
 
     This will:
         • Compare all files matching frontend/public/locales/*/translation.toml
-        • Update progress badges in README.md
         • Update/format ignore_translation.toml automatically
 
     # --- Check a single language file ---
@@ -48,7 +46,6 @@ Arguments:
 import argparse
 import glob
 import os
-import re
 import sys
 from collections.abc import Mapping
 from typing import Iterable
@@ -94,45 +91,6 @@ def convert_to_multiline(data: tomlkit.TOMLDocument) -> tomlkit.TOMLDocument:
             # Add other types of data unchanged
             sorted_data[key] = value
     return sorted_data
-
-
-def write_readme(progress_list: list[tuple[str, int]]) -> None:
-    """Updates the progress status in the README.md file based on the provided progress list.
-
-    This function reads the existing README.md content, identifies lines containing
-    language-specific progress badges, and replaces the percentage values and URLs
-    with the new progress data.
-
-    Args:
-        progress_list (list[tuple[str, int]]): A list of tuples containing
-            language codes (e.g., 'fr_FR') and progress percentages (integers from 0 to 100).
-
-    Returns:
-        None
-    """
-    with open(
-        os.path.join(os.getcwd(), "devGuide", "HowToAddNewLanguage.md"),
-        encoding="utf-8",
-    ) as file:
-        content = file.readlines()
-
-    for i, line in enumerate(content[2:], start=2):
-        for progress in progress_list:
-            language, value = progress
-            if language in line:
-                if match := re.search(r"\!\[(\d+(\.\d+)?)%\]\(.*\)", line):
-                    content[i] = line.replace(
-                        match.group(0),
-                        f"![{value}%](https://geps.dev/progress/{value})",
-                    )
-
-    with open(
-        os.path.join(os.getcwd(), "devGuide", "HowToAddNewLanguage.md"),
-        "w",
-        encoding="utf-8",
-        newline="\n",
-    ) as file:
-        file.writelines(content)
 
 
 def _flatten_toml(data: Mapping[str, object], prefix: str = "") -> dict[str, object]:
@@ -310,7 +268,7 @@ def main() -> None:
     """Main entry point for the script.
 
     Parses command-line arguments and either processes a single language file
-    (with optional percentage output) or all files and updates the README.md.
+    (with optional percentage output) or all files and updates translation state.
 
     Command-line options:
         --lang, -l <file>: Specific locale to check, e.g. 'fr-FR'
@@ -318,7 +276,7 @@ def main() -> None:
         --show-missing-keys: Show the list of missing keys when checking a single language file.
     """
     parser = argparse.ArgumentParser(
-        description="Compare frontend i18n TOML files and optionally update README badges."
+        description="Compare frontend i18n TOML files and update translation state."
     )
     parser.add_argument(
         "--lang",
@@ -397,10 +355,9 @@ def main() -> None:
         print("ERROR: Language not found in results.")
         sys.exit(3)
 
-    # Default behavior (no --lang): process all and update README
+    # Default behavior (no --lang): process all and update translation state
     messages_file_paths = glob.glob(os.path.join(locales_dir, "*", "translation.toml"))
     compare_files(reference_file, messages_file_paths, translation_state_file)
-    # write_readme(progress)
 
 
 if __name__ == "__main__":

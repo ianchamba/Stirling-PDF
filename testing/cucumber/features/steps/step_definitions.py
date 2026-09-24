@@ -52,7 +52,12 @@ def step_use_example_file(context, filePath, fileInput):
 
     # Ensure the file exists before opening
     try:
-        example_file = open(filePath, "rb")
+        if filePath.endswith(".md.fixture"):
+            with open(filePath, "rb") as source:
+                example_file = io.BytesIO(source.read())
+            example_file.name = os.path.basename(filePath).removesuffix(".fixture")
+        else:
+            example_file = open(filePath, "rb")
         context.files[context.param_name] = example_file
     except FileNotFoundError:
         raise FileNotFoundError(f"The example file '{filePath}' does not exist.")

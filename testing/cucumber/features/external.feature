@@ -220,7 +220,7 @@ Feature: API Validation
 
     @calibre @positive @markdowntopdf
     Scenario: Convert Markdown to PDF
-        Given I use an example file at "exampleFiles/example.md" as parameter "fileInput"
+        Given I use an example file at "exampleFiles/example.md.fixture" as parameter "fileInput"
         When I send the API request to the endpoint "/api/v1/convert/markdown/pdf"
         Then the response status code should be 200
         And the response file should have size greater than 100

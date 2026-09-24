@@ -10,7 +10,6 @@ on:
       - "app/common/build.gradle"
       - "app/core/build.gradle"
       - "app/proprietary/build.gradle"
-      - "README.md"
       - "frontend/public/locales/*/translation.toml"
       - "app/core/src/main/resources/static/3rdPartyLicenses.json"
       - "scripts/ignore_translation.toml"
@@ -73,14 +72,14 @@ jobs:
           git add frontend/public/locales/*/translation.toml
           git diff --staged --quiet || git commit -m ":memo: Sync translation files (TOML)" || echo "No changes detected"
 
-      - name: Sync README.md
+      - name: Calculate translation coverage
         run: |
           python scripts/counter_translation_v3.py
 
       - name: Run git add
         run: |
-          git add README.md scripts/ignore_translation.toml
-          git diff --staged --quiet || git commit -m ":memo: Sync README.md & scripts/ignore_translation.toml" || echo "No changes detected"
+          git add scripts/ignore_translation.toml
+          git diff --staged --quiet || git commit -m ":memo: Update translation coverage state" || echo "No changes detected"
 
       - name: Create Pull Request
         if: always()
@@ -93,11 +92,11 @@ jobs:
           signoff: true
           branch: sync_readme_v3
           base: main
-          title: ":globe_with_meridians: Sync Translations + Update README Progress Table"
+          title: ":globe_with_meridians: Sync Translations and Coverage State"
           body: |
             ### Description of Changes
 
-            This Pull Request was automatically generated to synchronize updates to translation files and documentation. Below are the details of the changes made:
+            This Pull Request was automatically generated to synchronize translation files and coverage state. Below are the details of the changes made:
 
             #### **1. Synchronization of Translation Files**
             - Updated translation files (`frontend/public/locales/*/translation.toml`) to reflect changes in the reference file `en-GB/translation.toml`.
@@ -105,14 +104,13 @@ jobs:
             - Highlighted any missing or incomplete translations.
             - **Format**: TOML
 
-            #### **2. Update README.md**
-            - Generated the translation progress table in `README.md` using `counter_translation_v3.py`.
-            - Added a summary of the current translation status for all supported languages.
-            - Included up-to-date statistics on translation coverage.
+            #### **2. Update Translation Coverage State**
+            - Calculated translation coverage using `counter_translation_v3.py`.
+            - Updated ignored and missing translation keys in `scripts/ignore_translation.toml`.
 
             #### **Why these changes are necessary**
             - Keeps translation files aligned with the latest reference updates.
-            - Ensures the documentation reflects the current translation progress.
+            - Keeps ignored and missing translation keys aligned with the current translations.
 
             ---
 
@@ -124,6 +122,5 @@ jobs:
           labels: github-actions
           sign-commits: true
           add-paths: |
-            README.md
             frontend/public/locales/*/translation.toml
             scripts/ignore_translation.toml

@@ -1,6 +1,7 @@
 import { test, expect } from "@app/tests/helpers/stub-test-base";
 import * as path from "path";
 import * as fs from "fs";
+import * as os from "os";
 
 /**
  * Seed test for Stirling-PDF E2E tests.
@@ -30,6 +31,23 @@ function resolveFixturePath(filename: string): string {
   return candidates[0];
 }
 
+function createMarkdownFixture(): string {
+  const source = resolveFixturePath("sample.md.fixture");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "stirling-markdown-"));
+  const target = path.join(directory, "sample.md");
+  try {
+    fs.copyFileSync(source, target);
+  } catch (error) {
+    fs.rmdirSync(directory);
+    throw error;
+  }
+  process.once("exit", () => {
+    fs.unlinkSync(target);
+    fs.rmdirSync(directory);
+  });
+  return target;
+}
+
 export const TEST_FILES = {
   pdf: resolveFixturePath("sample.pdf"),
   docx: resolveFixturePath("sample.docx"),
@@ -41,7 +59,7 @@ export const TEST_FILES = {
   txt: resolveFixturePath("sample.txt"),
   csv: resolveFixturePath("sample.csv"),
   xml: resolveFixturePath("sample.xml"),
-  md: resolveFixturePath("sample.md"),
+  md: createMarkdownFixture(),
   svg: resolveFixturePath("sample.svg"),
   corrupted: resolveFixturePath("corrupted.pdf"),
 } as const;
