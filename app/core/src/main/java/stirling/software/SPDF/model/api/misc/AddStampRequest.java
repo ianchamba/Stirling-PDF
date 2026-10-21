@@ -61,19 +61,17 @@ public class AddStampRequest extends PDFWithPageNums {
 
     @Schema(
             description =
-                    "Override X coordinate for stamp placement. If set, it will override the"
-                            + " position-based calculation. Negative value means no override.",
-            defaultValue = "-1",
-            requiredMode = Schema.RequiredMode.REQUIRED)
-    private float overrideX; // Default to -1 indicating no override
+                    "Override X coordinate in PDF points when overrideY is also non-negative."
+                            + " Negative value keeps automatic horizontal alignment.",
+            defaultValue = "-1")
+    private float overrideX = -1;
 
     @Schema(
             description =
-                    "Override Y coordinate for stamp placement. If set, it will override the"
-                            + " position-based calculation. Negative value means no override.",
-            defaultValue = "-1",
-            requiredMode = Schema.RequiredMode.REQUIRED)
-    private float overrideY; // Default to -1 indicating no override
+                    "Height in PDF points from the bottom to the first text baseline or image base."
+                            + " Works independently of overrideX. Negative value keeps automatic placement.",
+            defaultValue = "-1")
+    private float overrideY = -1;
 
     @Schema(
             description = "Specifies the margin size for the stamp.",

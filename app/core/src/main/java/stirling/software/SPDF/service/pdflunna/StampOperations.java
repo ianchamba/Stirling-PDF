@@ -251,11 +251,13 @@ public class StampOperations {
 
         if (overrideX >= 0 && overrideY >= 0) {
             x = overrideX;
-            y = overrideY;
         } else {
             x = calculatePositionX(pageSize, position, maxLineWidth, margin);
-            y = calculatePositionY(pageSize, position, totalTextHeight, margin);
         }
+        y =
+                overrideY >= 0
+                        ? overrideY
+                        : calculatePositionY(pageSize, position, totalTextHeight, margin);
 
         contentStream.beginText();
         for (int i = 0; i < lines.length; i++) {
@@ -425,12 +427,14 @@ public class StampOperations {
         if (overrideX >= 0 && overrideY >= 0) {
             // Use override values if provided
             x = overrideX;
-            y = overrideY;
         } else {
             x = calculatePositionX(pageSize, position, desiredPhysicalWidth, margin);
-            // drawImage() places the lower-left corner at (x, y); use image-specific Y logic
-            y = calculateImagePositionY(pageSize, position, desiredPhysicalHeight, margin);
         }
+        y =
+                overrideY >= 0
+                        ? overrideY
+                        : calculateImagePositionY(
+                                pageSize, position, desiredPhysicalHeight, margin);
 
         float llx = pageSize.getLowerLeftX();
         float lly = pageSize.getLowerLeftY();

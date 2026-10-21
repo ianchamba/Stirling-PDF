@@ -79,7 +79,11 @@ public class PdfLunnaController {
                 "supportedOperations",
                 SUPPORTED.stream().filter(endpointConfiguration::isEndpointEnabledForUri).toList(),
                 "features",
-                List.of("singleDocumentPass", "imageUploads", "semanticPageSelection"),
+                List.of(
+                        "singleDocumentPass",
+                        "imageUploads",
+                        "semanticPageSelection",
+                        "independentStampY"),
                 "maxOperations",
                 MAX_OPERATIONS,
                 "supportsRasterization",
